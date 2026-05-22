@@ -11,7 +11,7 @@ import paramiko
 
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).parent
-REPO_ROOT   = SCRIPT_DIR.parent.parent.parent   # OpenClaw-test/
+REPO_ROOT   = SCRIPT_DIR.parent.parent.parent   # repository root
 GL_ROOT     = SCRIPT_DIR.parent.parent           # GarvynLabs/
 WEB_PUBLIC  = GL_ROOT / "apps" / "web" / "public"
 API_DIR     = GL_ROOT / "apps" / "api"

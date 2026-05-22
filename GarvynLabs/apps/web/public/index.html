@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Garvyn Labs</title>
-  <meta name="description" content="Garvyn Labs: AI Agent、产品思考、技术笔记与 Jarvis 开发记录。">
+  <meta name="description" content="Garvyn Labs: AI Agent、产品思考、技术笔记与 J.A.R.V.I.S 开发记录。">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=3">
   <link rel="icon" href="/favicon.jpg">
 </head>
 <body>
@@ -18,10 +18,30 @@
       <a href="/">首页</a>
       <a href="/about/">关于我</a>
       <a href="/ai-news/">AI最新动态</a>
-      <a href="/ai-thinking/">AI产品思考</a>
+      <div class="nav-dropdown">
+        <a href="/ai-thinking/" class="nav-dropdown-trigger">AI产品思考</a>
+        <div class="nav-dropdown-menu">
+          <a href="/ai-thinking/general/">通用思考</a>
+          <a href="/ai-thinking/retro/">J.A.R.V.I.S 深度复盘</a>
+        </div>
+      </div>
       <a href="/ai-technology/">AI产品技术</a>
-      <a href="/jarvis/">Jarvis</a>
-      <a href="/projects/">其他项目作品</a>
+      <div class="nav-dropdown">
+        <a href="/jarvis/" class="nav-dropdown-trigger">J.A.R.V.I.S</a>
+        <div class="nav-dropdown-menu">
+          <a href="/jarvis/product-iteration/">产品迭代</a>
+          <a href="/jarvis/fix-updates/">修复更新</a>
+          <a href="/jarvis/product-analysis/">产品分析</a>
+        </div>
+      </div>
+      <div class="nav-dropdown">
+        <a href="/projects/" class="nav-dropdown-trigger">其他项目作品</a>
+        <div class="nav-dropdown-menu">
+          <a href="/projects/realbrain/">Realbrain</a>
+          <a href="/projects/cloud-platform/">云服务数据平台</a>
+          <a href="/projects/werewolf/">多Agent狼人杀</a>
+        </div>
+      </div>
     </nav>
   </header>
 

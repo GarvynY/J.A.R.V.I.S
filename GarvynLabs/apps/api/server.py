@@ -15,6 +15,7 @@ import os
 import re
 import threading
 import time
+import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -38,7 +39,7 @@ JARVIS_SUBCATEGORIES = {
 }
 THINKING_SUBCATEGORIES = {
     "general": "AI产品思考",
-    "retro-general": "Jarvis 深度复盘",
+    "retro-general": "J.A.R.V.I.S 深度复盘",
     "retro-part1": "Part 1：产品定位与架构演进",
     "retro-part2": "Part 2：证据系统与可信输出",
     "retro-part3": "Part 3：Token 与上下文治理",
@@ -51,12 +52,47 @@ ASSET_TTL_SECONDS = 24 * 60 * 60
 ANALYTICS_MAX_EVENTS = 20000
 ANALYTICS_LOCK = threading.Lock()
 CATEGORY_LABELS = {
-    "jarvis": "Jarvis",
+    "jarvis": "J.A.R.V.I.S",
     "ai-news": "AI动态",
     "ai-thinking": "AI产品思考",
     "ai-technology": "AI产品技术",
 }
 SLUG_RE = re.compile(r"[^\w-]+", re.UNICODE)
+
+_GEO_CACHE: dict[str, dict] = {}
+_GEO_CACHE_LOCK = threading.Lock()
+_GEO_CACHE_MAX = 2000
+_PRIVATE_IP_RE = re.compile(
+    r"^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|::1|fd|fe80)"
+)
+
+
+def _lookup_geo(ip: str) -> dict:
+    if not ip or _PRIVATE_IP_RE.match(ip):
+        return {"country": "", "region": "", "city": ""}
+    with _GEO_CACHE_LOCK:
+        if ip in _GEO_CACHE:
+            return _GEO_CACHE[ip]
+    try:
+        url = f"http://ip-api.com/json/{ip}?lang=zh-CN&fields=status,country,regionName,city"
+        req = urllib.request.Request(url, headers={"User-Agent": "GarvynLabs/1.0"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if data.get("status") == "success":
+            geo = {
+                "country": data.get("country", ""),
+                "region": data.get("regionName", ""),
+                "city": data.get("city", ""),
+            }
+        else:
+            geo = {"country": "", "region": "", "city": ""}
+    except Exception:
+        geo = {"country": "", "region": "", "city": ""}
+    with _GEO_CACHE_LOCK:
+        if len(_GEO_CACHE) >= _GEO_CACHE_MAX:
+            _GEO_CACHE.clear()
+        _GEO_CACHE[ip] = geo
+    return geo
 
 
 ADMIN_HTML = """<!doctype html>
@@ -116,7 +152,7 @@ ADMIN_HTML = """<!doctype html>
     .metric { padding:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }
     .metric span { display:block; color:var(--muted); font-size:12px; }
     .metric strong { display:block; margin-top:8px; font-size:26px; line-height:1; }
-    .analytics-grid { display:grid; grid-template-columns:1.2fr .8fr; gap:14px; margin-top:14px; }
+    .analytics-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     .analytics-card { padding:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }
     .analytics-card h3 { margin:0 0 10px; font-size:14px; }
     .analytics-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -146,7 +182,7 @@ ADMIN_HTML = """<!doctype html>
       <section>
         <div class="grid">
           <div><label>标题</label><input id="title"></div>
-          <div><label>栏目</label><select id="category"><option value="ai-news">AI动态</option><option value="ai-thinking">AI产品思考</option><option value="ai-technology">AI产品技术</option><option value="jarvis">Jarvis</option></select></div>
+          <div><label>栏目</label><select id="category"><option value="ai-news">AI动态</option><option value="ai-thinking">AI产品思考</option><option value="ai-technology">AI产品技术</option><option value="jarvis">J.A.R.V.I.S</option></select></div>
           <div><label>日期</label><input id="date" type="date"></div>
         </div>
         <label>Slug</label><input id="slug" placeholder="article-slug">
@@ -165,6 +201,9 @@ ADMIN_HTML = """<!doctype html>
         <div class="analytics-card"><h3>近 14 天访问趋势</h3><div id="analyticsDays"></div></div>
         <div class="analytics-card"><h3>热门页面（近 30 天）</h3><div id="analyticsTopPaths"></div></div>
       </div>
+      <div class="analytics-grid" style="margin-top:0">
+        <div class="analytics-card" style="grid-column:1/-1"><h3>访客地域分布（近 30 天）</h3><div id="analyticsGeo"></div></div>
+      </div>
     </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
@@ -175,7 +214,7 @@ ADMIN_HTML = """<!doctype html>
     let imageInsertState = null;
     const $ = (id) => document.getElementById(id);
     const CATS = ['ai-news', 'ai-thinking', 'ai-technology', 'jarvis'];
-    const CAT_LABELS = { 'jarvis': 'Jarvis', 'ai-news': 'AI动态', 'ai-thinking': 'AI产品思考', 'ai-technology': 'AI产品技术' };
+    const CAT_LABELS = { 'jarvis': 'J.A.R.V.I.S', 'ai-news': 'AI动态', 'ai-thinking': 'AI产品思考', 'ai-technology': 'AI产品技术' };
     const SUBCATS_BY_CAT = {
       'jarvis': [
         { key: 'fix-updates', label: '修复更新' },
@@ -184,16 +223,16 @@ ADMIN_HTML = """<!doctype html>
       ],
       'ai-thinking': [
         { key: 'general', label: 'AI产品思考（通用）' },
-        { key: 'retro-general', label: 'Jarvis 深度复盘（总纲）' },
-        { key: 'retro-part1', label: 'Jarvis 深度复盘 · Part 1：产品定位与架构演进' },
-        { key: 'retro-part2', label: 'Jarvis 深度复盘 · Part 2：证据系统与可信输出' },
-        { key: 'retro-part3', label: 'Jarvis 深度复盘 · Part 3：Token 与上下文治理' },
-        { key: 'retro-part4', label: 'Jarvis 深度复盘 · Part 4：数据质量与垂直金融场景' },
-        { key: 'retro-part5', label: 'Jarvis 深度复盘 · Part 5：用户信任与个性化' },
-        { key: 'retro-part6', label: 'Jarvis 深度复盘 · Part 6：审计、评估与系统进化' }
+        { key: 'retro-general', label: 'J.A.R.V.I.S 深度复盘（总纲）' },
+        { key: 'retro-part1', label: 'J.A.R.V.I.S 深度复盘 · Part 1：产品定位与架构演进' },
+        { key: 'retro-part2', label: 'J.A.R.V.I.S 深度复盘 · Part 2：证据系统与可信输出' },
+        { key: 'retro-part3', label: 'J.A.R.V.I.S 深度复盘 · Part 3：Token 与上下文治理' },
+        { key: 'retro-part4', label: 'J.A.R.V.I.S 深度复盘 · Part 4：数据质量与垂直金融场景' },
+        { key: 'retro-part5', label: 'J.A.R.V.I.S 深度复盘 · Part 5：用户信任与个性化' },
+        { key: 'retro-part6', label: 'J.A.R.V.I.S 深度复盘 · Part 6：审计、评估与系统进化' }
       ]
     };
-    const SUBCAT_LABELS_BY_CAT = { 'jarvis': 'Jarvis 二级栏目', 'ai-thinking': '产品思考分区' };
+    const SUBCAT_LABELS_BY_CAT = { 'jarvis': 'J.A.R.V.I.S 二级栏目', 'ai-thinking': '产品思考分区' };
     const collapsedGroups = new Set();
 
     function parseFrontmatter(text) {
@@ -390,6 +429,11 @@ ADMIN_HTML = """<!doctype html>
           { label: "浏览", render: (row) => row.views },
           { label: "访客", render: (row) => row.visitors }
         ], "暂无热门页面。");
+        $("analyticsGeo").innerHTML = renderTable(data.geoDistribution || [], [
+          { label: "地区", render: (row) => escapeHtml(row.location) },
+          { label: "访客", render: (row) => row.visitors },
+          { label: "浏览", render: (row) => row.views }
+        ], "暂无地域数据。新访问将自动记录 IP 归属地。");
       } catch (error) {
         $("analyticsMetrics").innerHTML = `<div class="status">${escapeHtml(error.message || "统计加载失败")}</div>`;
       }
@@ -586,7 +630,7 @@ ADMIN_HTML = """<!doctype html>
         $("date").value = meta.date || today();
         $("slug").value = meta.slug ? slugify(meta.slug) : slugify(title);
         $("summary").value = meta.summary || '';
-        setEditorMode("md", body.trim());
+        setEditorMode("md", body.replace(/\\r\\n?/g, "\\n").trimStart());
         $("status").textContent = `已从文件加载：${file.name}`;
       };
       reader.readAsText(file, 'utf-8');
@@ -776,6 +820,7 @@ def _record_pageview(payload: dict, headers) -> None:
     visitor_seed = str(payload.get("visitorId") or "")
     session_seed = str(payload.get("sessionId") or "")
     ip = _client_ip(headers)
+    geo = _lookup_geo(ip)
     event = {
         "ts": now,
         "day": time.strftime("%Y-%m-%d", time.localtime(now)),
@@ -786,6 +831,7 @@ def _record_pageview(payload: dict, headers) -> None:
         "session": _hash_value(session_seed or f"{ip}:{headers.get('user-agent', '')}:{now // 1800}"),
         "ua": _trim(headers.get("user-agent", ""), 240),
         "ipHash": _hash_value(ip),
+        "geo": geo,
     }
     with ANALYTICS_LOCK:
         ANALYTICS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -823,6 +869,7 @@ def _analytics_summary() -> dict:
         },
         "days": days,
         "topPaths": _top_paths(events_30d),
+        "geoDistribution": _geo_distribution(events_30d),
         "updatedAt": int(time.time() * 1000),
     }
 
@@ -866,6 +913,30 @@ def _top_paths(events: list[dict], limit: int = 10) -> list[dict]:
         for item in grouped.values()
     ]
     return sorted(rows, key=lambda row: (-row["views"], row["path"]))[:limit]
+
+
+def _geo_distribution(events: list[dict]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for event in events:
+        geo = event.get("geo")
+        if not geo or not isinstance(geo, dict):
+            continue
+        country = geo.get("country", "")
+        region = geo.get("region", "")
+        city = geo.get("city", "")
+        if not country and not region:
+            continue
+        parts = [p for p in (country, region, city) if p]
+        location = " · ".join(parts)
+        item = grouped.setdefault(location, {"location": location, "country": country, "region": region, "city": city, "views": 0, "visitors": set()})
+        item["views"] += 1
+        if event.get("visitor"):
+            item["visitors"].add(event["visitor"])
+    rows = [
+        {"location": item["location"], "views": item["views"], "visitors": len(item["visitors"])}
+        for item in grouped.values()
+    ]
+    return sorted(rows, key=lambda row: (-row["visitors"], -row["views"]))[:20]
 
 
 def _unique_count(events: list[dict], key: str) -> int:

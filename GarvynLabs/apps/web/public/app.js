@@ -18,10 +18,10 @@ const CATEGORY_META = {
     homeText: "记录 Agent 工程、系统设计、评测、安全和部署实践。"
   },
   jarvis: {
-    title: "Jarvis",
-    label: "Jarvis",
+    title: "J.A.R.V.I.S",
+    label: "J.A.R.V.I.S",
     description: "个人 AI Agent 系统的开发过程、架构演进与实验记录。",
-    homeText: "Jarvis 是我的个人 AI Agent 系统，也是很多工程实验的起点。"
+    homeText: "J.A.R.V.I.S 是我的个人 AI Agent 系统，也是很多工程实验的起点。"
   },
 };
 
@@ -33,7 +33,7 @@ const JARVIS_SUBCATEGORIES = [
 
 const THINKING_SUBCATEGORIES = [
   { key: "general", title: "AI产品思考" },
-  { key: "retro-general", title: "Jarvis 深度复盘" },
+  { key: "retro-general", title: "J.A.R.V.I.S 深度复盘" },
   { key: "retro-part1", title: "Part 1：产品定位与架构演进" },
   { key: "retro-part2", title: "Part 2：证据系统与可信输出" },
   { key: "retro-part3", title: "Part 3：Token 与上下文治理" },
@@ -46,6 +46,7 @@ const RETRO_PARTS = THINKING_SUBCATEGORIES.filter((s) => s.key.startsWith("retro
 
 const PROJECT_ITEMS = [
   {
+    slug: "realbrain",
     title: "Realbrain",
     label: "Project",
     description: "项目介绍正在整理中。"
@@ -56,6 +57,12 @@ const PROJECT_ITEMS = [
     label: "Platform",
     description: "基于 Kubernetes、Fission、Redis + RQ、Elasticsearch 构建的云原生社交媒体情绪分析平台，用于采集、处理和可视化澳大利亚大选相关公开数据。",
     file: "/content/projects/cloud-platform.md"
+  },
+  {
+    slug: "werewolf",
+    title: "面向信息不对称博弈的多 Agent 狼人杀实验平台",
+    label: "Experiment",
+    description: "这是一个支持 9 人标准局的 AI 博弈研究平台。我们引入 Belief-driven Planning 架构，实现了从对局引擎、策略演化到 BadCase 复盘的全闭环开发，旨在通过结构化证据流（Fact Stream）揭示大模型在复杂对抗博弈中的行为特征与认知局限。"
   }
 ];
 
@@ -143,19 +150,30 @@ function currentRoute() {
   if (path.startsWith("/projects/")) {
     return { type: "project-detail", slug: path.split("/")[2] };
   }
-  const key = path.slice(1);
-  if (key === "jarvis") return { type: "jarvis", category: "jarvis" };
-  if (key === "ai-thinking") return { type: "ai-thinking", category: "ai-thinking" };
+  const parts = path.slice(1).split("/");
+  if (parts[0] === "jarvis" && parts[1]) {
+    return { type: "jarvis-sub", category: "jarvis", subcategory: parts[1] };
+  }
+  if (parts[0] === "jarvis") return { type: "jarvis", category: "jarvis" };
+  if (parts[0] === "ai-thinking" && parts[1]) {
+    return { type: "ai-thinking-sub", category: "ai-thinking", subcategory: parts[1] };
+  }
+  if (parts[0] === "ai-thinking") return { type: "ai-thinking", category: "ai-thinking" };
+  const key = parts[0];
   if (CATEGORY_META[key]) return { type: "category", category: key };
   return { type: "home" };
 }
 
 function setActiveNav(route) {
+  const currentPath = window.location.pathname.replace(/\/+$/, "") || "/";
   document.querySelectorAll(".nav a").forEach((link) => {
     const href = link.getAttribute("href");
-    const key = href.replaceAll("/", "");
+    const hrefClean = href.replace(/\/+$/, "") || "/";
+    const key = hrefClean.replaceAll("/", "");
     const isHome = href === "/" && route.type === "home";
-    link.classList.toggle("active", isHome || route.category === key || route.type === key);
+    const isExactSub = hrefClean === currentPath;
+    const isParent = !link.closest(".nav-dropdown-menu") && (route.category === key || route.type === key);
+    link.classList.toggle("active", isHome || isExactSub || isParent);
   });
 }
 
@@ -205,9 +223,9 @@ function thinkingSubcategoryKey(article) {
 function thinkingSubcategoryLabel(article) {
   const key = thinkingSubcategoryKey(article);
   if (key === "general") return "AI产品思考";
-  if (key === "retro-general") return "Jarvis 深度复盘";
+  if (key === "retro-general") return "J.A.R.V.I.S 深度复盘";
   const part = RETRO_PARTS.find((item) => item.key === key);
-  return part ? `Jarvis 深度复盘 · ${part.title}` : "AI产品思考";
+  return part ? `J.A.R.V.I.S 深度复盘 · ${part.title}` : "AI产品思考";
 }
 
 function subcategoryLabelFor(article) {
@@ -227,7 +245,31 @@ function articleCard(article) {
   `;
 }
 
+function recentUpdatesSection(articles, label) {
+  const sorted = [...articles].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const top = sorted.slice(0, 5);
+  if (!top.length) return "";
+  return `
+    <section class="section recent-updates">
+      <div class="section-inner">
+        <h2 class="recent-title">${label || "最近更新"}</h2>
+        <ul class="recent-list">
+          ${top.map((a) => `
+            <li>
+              <a href="/article/?slug=${encodeURIComponent(a.slug)}">
+                <span class="recent-item-title">${escapeHtml(a.title)}</span>
+                <span class="recent-item-date">${a.date || ""}</span>
+              </a>
+            </li>
+          `).join("")}
+        </ul>
+      </div>
+    </section>
+  `;
+}
+
 function renderHome() {
+  const allArticles = manifest.articles || [];
   app.innerHTML = `
     <section class="hero">
       <h1 class="hero-title">Garvyn Labs</h1>
@@ -247,6 +289,7 @@ function renderHome() {
         </div>
       </div>
     </section>
+    ${recentUpdatesSection(allArticles, "全站最近更新")}
   `;
 }
 
@@ -261,6 +304,7 @@ function renderCategory(category) {
         <p>${meta.description}</p>
       </div>
     </section>
+    ${recentUpdatesSection(articles)}
     <section class="section">
       <div class="section-inner">
         <div class="articles">
@@ -311,13 +355,13 @@ function renderAbout() {
           <article class="about-panel">
             <span class="about-label">Core Project</span>
             <h2>我的核心项目</h2>
-            <p>实践是验证思考的最佳方式，Jarvis 最初是一个人民币兑澳元汇率监控 Agent，用于追踪汇率变化、相关新闻和用户自定义提醒。随着项目迭代，我将其扩展为一个隐私可控的多智能体金融研究工作流：系统能够拆解研究任务，调用不同专家 Agent 进行分析，通过安全上下文保护用户数据，并以结构化证据和可审计简报的形式输出研究结果。</p>
+            <p>实践是验证思考的最佳方式，J.A.R.V.I.S 最初是一个人民币兑澳元汇率监控 Agent，用于追踪汇率变化、相关新闻和用户自定义提醒。随着项目迭代，我将其扩展为一个隐私可控的多智能体金融研究工作流：系统能够拆解研究任务，调用不同专家 Agent 进行分析，通过安全上下文保护用户数据，并以结构化证据和可审计简报的形式输出研究结果。</p>
           </article>
 
           <article class="about-panel">
             <span class="about-label">Practice</span>
             <h2>其他实践项目</h2>
-            <p>除了 Jarvis，我也参与过企业级 AI 分析平台、数据产品、云原生服务架构和数据科学相关项目。这些经历让我意识到，AI 产品能否真正落地，往往取决于模型之外的部分：数据结构、系统可靠性、用户反馈、可解释性、合规边界和持续迭代机制。</p>
+            <p>除了 J.A.R.V.I.S，我也参与过企业级 AI 分析平台、数据产品、云原生服务架构和数据科学相关项目。这些经历让我意识到，AI 产品能否真正落地，往往取决于模型之外的部分：数据结构、系统可靠性、用户反馈、可解释性、合规边界和持续迭代机制。</p>
           </article>
 
           <article class="about-panel">
@@ -347,7 +391,7 @@ function renderProjects() {
       <div class="section-inner">
         <span class="eyebrow">Projects</span>
         <h1>其他项目作品</h1>
-        <p>这里将用于展示 Jarvis 之外的产品、平台和实验项目。</p>
+        <p>这里将用于展示 J.A.R.V.I.S 之外的产品、平台和实验项目。</p>
       </div>
     </section>
     <section class="section">
@@ -374,8 +418,25 @@ function renderProjects() {
 
 async function renderProjectDetail(slug) {
   const project = PROJECT_ITEMS.find((p) => p.slug === slug);
-  if (!project || !project.file) {
+  if (!project) {
     app.innerHTML = `<section class="article-shell"><article class="article"><h1>项目不存在</h1><p>没有找到这个项目。</p></article></section>`;
+    return;
+  }
+  if (!project.file) {
+    app.innerHTML = `
+      <section class="page-hero">
+        <div class="section-inner">
+          <span class="eyebrow">${escapeHtml(project.label)}</span>
+          <h1>${escapeHtml(project.title)}</h1>
+          <p>${escapeHtml(project.description)}</p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-inner">
+          <div class="empty">项目详情正在整理中，敬请期待。</div>
+        </div>
+      </section>
+    `;
     return;
   }
   try {
@@ -419,30 +480,31 @@ function renderJarvis() {
     <section class="jarvis-hero">
       <div class="jarvis-panel">
         <span class="eyebrow">Personal AI Agent System</span>
-        <h1>Jarvis</h1>
-        <p>Jarvis 是一个从人民币兑澳元汇率监控切入的隐私可控多智能体研究系统，当前聚焦汇率相关信息检索、证据聚合、风险识别与可追踪研究简报生成，并为更广泛的金融研究工作流扩展打下基础。</p>
+        <h1>J.A.R.V.I.S</h1>
+        <p>J.A.R.V.I.S 是一个从人民币兑澳元汇率监控切入的隐私可控多智能体研究系统，当前聚焦汇率相关信息检索、证据聚合、风险识别与可追踪研究简报生成，并为更广泛的金融研究工作流扩展打下基础。</p>
       </div>
     </section>
+    ${recentUpdatesSection(articles)}
     <section class="section jarvis-vision">
       <div class="section-inner">
         <span class="eyebrow">System Direction</span>
-        <h2>Jarvis 和最终形态展望</h2>
+        <h2>J.A.R.V.I.S 和最终形态展望</h2>
         <div class="jarvis-vision-copy">
           <article class="jarvis-vision-card">
             <span>Current</span>
-            <p>Jarvis 当前以人民币兑澳元实时汇率监控作为首个落地场景，已具备汇率异常监测、相关新闻追踪、自动提醒、模型辅助分析、用户偏好管理与安全上下文控制等能力。系统的定位不是替代用户直接做金融决策，而是作为研究辅助工具，帮助用户更高效地获取信息、理解影响因素、识别潜在风险，并形成可追溯的研究结论。</p>
+            <p>J.A.R.V.I.S 当前以人民币兑澳元实时汇率监控作为首个落地场景，已具备汇率异常监测、相关新闻追踪、自动提醒、模型辅助分析、用户偏好管理与安全上下文控制等能力。系统的定位不是替代用户直接做金融决策，而是作为研究辅助工具，帮助用户更高效地获取信息、理解影响因素、识别潜在风险，并形成可追溯的研究结论。</p>
           </article>
           <article class="jarvis-vision-card">
             <span>Workflow</span>
-            <p>在后续演进中，Jarvis 将从单一汇率监控工具扩展为面向金融信息研究的多智能体工作流。系统会将一个研究问题拆解为多个专业视角，例如汇率走势、新闻事件、宏观政策、央行信号、行业信息和风险校验等。不同智能体独立完成各自任务，并输出统一格式的证据、置信度、来源和缺失信息，最终由总控模块进行汇总，生成包含结论、依据、风险和不确定性的研究简报。</p>
+            <p>在后续演进中，J.A.R.V.I.S 将从单一汇率监控工具扩展为面向金融信息研究的多智能体工作流。系统会将一个研究问题拆解为多个专业视角，例如汇率走势、新闻事件、宏观政策、央行信号、行业信息和风险校验等。不同智能体独立完成各自任务，并输出统一格式的证据、置信度、来源和缺失信息，最终由总控模块进行汇总，生成包含结论、依据、风险和不确定性的研究简报。</p>
           </article>
           <article class="jarvis-vision-card">
             <span>Evidence</span>
-            <p>为了支持更复杂的行业研究和大量资料检索，Jarvis 正在引入动态证据库机制。系统不会将所有原文和中间分析一次性传给大模型，而是将重要证据切分、标注并存储为可检索的证据片段。每个证据片段都会带有主题类别、相关实体、信息来源、时间戳、重要性等结构化标签。总控模块在生成报告时，会先根据这些标签筛选相关证据，再提取必要内容，从而降低上下文成本，减少无关信息干扰，并提升结论的可追溯性。</p>
+            <p>为了支持更复杂的行业研究和大量资料检索，J.A.R.V.I.S 正在引入动态证据库机制。系统不会将所有原文和中间分析一次性传给大模型，而是将重要证据切分、标注并存储为可检索的证据片段。每个证据片段都会带有主题类别、相关实体、信息来源、时间戳、重要性等结构化标签。总控模块在生成报告时，会先根据这些标签筛选相关证据，再提取必要内容，从而降低上下文成本，减少无关信息干扰，并提升结论的可追溯性。</p>
           </article>
           <article class="jarvis-vision-card">
             <span>Long Term</span>
-            <p>长期来看，Jarvis 将继续扩展证据加权、动态深挖、法律与监管信息检索、任务队列化执行、弹性智能体调度和研究质量评估等能力。系统未来不仅可以服务于汇率监控，也可以扩展到行业研究、公司分析、宏观专题、政策监管和用户自定义研究方向，形成一个更通用、更可靠、可复查的金融研究辅助平台。</p>
+            <p>长期来看，J.A.R.V.I.S 将继续扩展证据加权、动态深挖、法律与监管信息检索、任务队列化执行、弹性智能体调度和研究质量评估等能力。系统未来不仅可以服务于汇率监控，也可以扩展到行业研究、公司分析、宏观专题、政策监管和用户自定义研究方向，形成一个更通用、更可靠、可复查的金融研究辅助平台。</p>
           </article>
         </div>
       </div>
@@ -463,15 +525,15 @@ function renderJarvis() {
               </section>
             `).join("")}
           </div>
-        ` : `<div class="empty">Jarvis 的专题笔记结构还在整理中。</div>`}
+        ` : `<div class="empty">J.A.R.V.I.S 的专题笔记结构还在整理中。</div>`}
       </div>
     </section>
     <section class="section jarvis-repo-section">
       <div class="section-inner">
         <a class="jarvis-repo-link" href="https://github.com/GarvynY/Jarvis" target="_blank" rel="noopener">
           <span class="jarvis-repo-label">GitHub Repository</span>
-          <strong>GarvynY / Jarvis</strong>
-          <span class="jarvis-repo-url">github.com/GarvynY/Jarvis</span>
+          <strong>GarvynY / J.A.R.V.I.S</strong>
+          <span class="jarvis-repo-url">github.com/GarvynY/J.A.R.V.I.S</span>
         </a>
       </div>
     </section>
@@ -498,6 +560,7 @@ function renderThinking() {
         <p>${meta.description}</p>
       </div>
     </section>
+    ${recentUpdatesSection(articles)}
     <section class="section">
       <div class="section-inner">
         ${hasGeneral ? `
@@ -509,7 +572,7 @@ function renderThinking() {
           <div class="jarvis-groups">
             <section class="jarvis-group">
               <div class="jarvis-group-heading">
-                <h2>Jarvis 深度复盘系列</h2>
+                <h2>J.A.R.V.I.S 深度复盘系列</h2>
                 <span>${retroTotal}</span>
               </div>
               ${retroIntroArticles.length ? `
@@ -534,6 +597,95 @@ function renderThinking() {
           </div>
         ` : ""}
         ${!hasGeneral && !hasRetro ? `<div class="empty">这里还没有发布的笔记。</div>` : ""}
+      </div>
+    </section>
+  `;
+}
+
+function renderThinkingSub(subcategory) {
+  const articles = articlesFor("ai-thinking");
+  if (subcategory === "general") {
+    const filtered = articles.filter((a) => thinkingSubcategoryKey(a) === "general");
+    app.innerHTML = `
+      <section class="page-hero">
+        <div class="section-inner">
+          <span class="eyebrow">AI产品思考</span>
+          <h1>通用思考</h1>
+          <p>关于 AI 产品的通用思考、观察与实践总结。</p>
+        </div>
+      </section>
+      ${recentUpdatesSection(filtered)}
+      <section class="section">
+        <div class="section-inner">
+          ${filtered.length ? `<div class="articles">${filtered.map(articleCard).join("")}</div>` : `<div class="empty">这里还没有发布的笔记。</div>`}
+        </div>
+      </section>
+    `;
+  } else if (subcategory === "retro") {
+    const retroIntroArticles = articles.filter((a) => thinkingSubcategoryKey(a) === "retro-general");
+    const retroGroups = RETRO_PARTS.map((part) => {
+      const grouped = articles.filter((a) => thinkingSubcategoryKey(a) === part.key);
+      return { ...part, articles: grouped };
+    }).filter((g) => g.articles.length);
+    const retroTotal = retroIntroArticles.length + retroGroups.reduce((n, g) => n + g.articles.length, 0);
+    app.innerHTML = `
+      <section class="page-hero">
+        <div class="section-inner">
+          <span class="eyebrow">AI产品思考</span>
+          <h1>J.A.R.V.I.S 深度复盘</h1>
+          <p>围绕 J.A.R.V.I.S 系统的全面复盘，涵盖架构演进、证据系统、上下文治理、数据质量、用户信任与系统评估。</p>
+        </div>
+      </section>
+      ${recentUpdatesSection(articles.filter((a) => thinkingSubcategoryKey(a) !== "general"))}
+      <section class="section">
+        <div class="section-inner">
+          ${retroTotal ? `
+            <div class="jarvis-groups">
+              <section class="jarvis-group">
+                <div class="jarvis-group-heading">
+                  <h2>J.A.R.V.I.S 深度复盘系列</h2>
+                  <span>${retroTotal}</span>
+                </div>
+                ${retroIntroArticles.length ? `<div class="articles">${retroIntroArticles.map(articleCard).join("")}</div>` : ""}
+                <div class="retro-parts">
+                  ${retroGroups.map((group) => `
+                    <section class="jarvis-group" style="margin-left:16px">
+                      <div class="jarvis-group-heading">
+                        <h3>${group.title}</h3>
+                        <span>${group.articles.length}</span>
+                      </div>
+                      <div class="articles">${group.articles.map(articleCard).join("")}</div>
+                    </section>
+                  `).join("")}
+                </div>
+              </section>
+            </div>
+          ` : `<div class="empty">这里还没有发布的笔记。</div>`}
+        </div>
+      </section>
+    `;
+  } else {
+    renderThinking();
+  }
+}
+
+function renderJarvisSub(subcategory) {
+  const articles = articlesFor("jarvis");
+  const sub = JARVIS_SUBCATEGORIES.find((s) => s.key === subcategory);
+  if (!sub) { renderJarvis(); return; }
+  const filtered = articles.filter((a) => jarvisSubcategoryKey(a) === subcategory);
+  app.innerHTML = `
+    <section class="page-hero">
+      <div class="section-inner">
+        <span class="eyebrow">J.A.R.V.I.S</span>
+        <h1>${sub.title}</h1>
+        <p>J.A.R.V.I.S ${sub.title}相关的开发记录与笔记。</p>
+      </div>
+    </section>
+    ${recentUpdatesSection(filtered)}
+    <section class="section">
+      <div class="section-inner">
+        ${filtered.length ? `<div class="articles">${filtered.map(articleCard).join("")}</div>` : `<div class="empty">这里还没有发布的笔记。</div>`}
       </div>
     </section>
   `;
@@ -623,6 +775,7 @@ function renderMarkdown(raw) {
     .replace(/^(\s*[-*+]) \[x\] /gim, '$1 <input type="checkbox" checked disabled class="task-cb"> ')
     .replace(/^(\s*[-*+]) \[ \] /gim, '$1 <input type="checkbox" disabled class="task-cb"> ');
   const md = window.markdownit({
+    breaks: true,
     html: true,
     linkify: true,
     typographer: true,
@@ -732,7 +885,9 @@ async function route(options = {}) {
   if (next.type === "project-detail") await renderProjectDetail(next.slug);
   if (next.type === "category") renderCategory(next.category);
   if (next.type === "jarvis") renderJarvis();
+  if (next.type === "jarvis-sub") renderJarvisSub(next.subcategory);
   if (next.type === "ai-thinking") renderThinking();
+  if (next.type === "ai-thinking-sub") renderThinkingSub(next.subcategory);
   if (next.type === "article") await renderArticle(next.slug);
   trackPageview();
 }
@@ -747,6 +902,7 @@ document.addEventListener("click", (event) => {
   if (!link) return;
   const url = new URL(link.href);
   if (url.origin !== window.location.origin) return;
+  if (url.pathname === window.location.pathname && url.hash) return;
   event.preventDefault();
   history.pushState({}, "", url.pathname + url.search);
   route();
